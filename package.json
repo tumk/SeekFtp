@@ -64,6 +64,11 @@
         "command": "idea-ftp.diffFile",
         "title": "Diff - Local file and FTP server file",
         "icon": "$(diff)"
+      },
+      {
+        "command": "idea-ftp.downloadFile",
+        "title": "Download - Download in working directory from FTP server",
+        "icon": "$(cloud-download)"
       }
     ],
     "menus": {
@@ -112,6 +117,10 @@
         {
           "command": "idea-ftp.diffFile",
           "group": "navigation@2"
+        },
+        {
+          "command": "idea-ftp.downloadFile",
+          "group": "navigation@3"
         }
       ]
     },

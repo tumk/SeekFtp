@@ -699,6 +699,106 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
+	// 注册文件下载命令
+	context.subscriptions.push(
+		vscode.commands.registerCommand('idea-ftp.downloadFile', async (resource?: vscode.Uri) => {
+			try {
+				let fileUri: vscode.Uri | undefined = resource;
+				
+				if (!fileUri) {
+					const activeEditor = vscode.window.activeTextEditor;
+					if (!activeEditor) {
+						throw new Error('Please select a file to download');
+					}
+					fileUri = activeEditor.document.uri;
+				}
+
+				if (fileUri.scheme !== 'file') {
+					throw new Error('Can only download to local file system');
+				}
+
+				// 获取本地文件路径
+				const localPath = fileUri.fsPath;
+
+				// 获取所有配置
+				const configs = await configManager.loadConfigs();
+				if (!configs || configs.length === 0) {
+					throw new Error('No FTP configuration found');
+				}
+
+				// 找到匹配的配置
+				const matchedConfigs = configs.filter(config => {
+					if (!config.localPath || !config.deployPath) {
+						return false;
+					}
+					return localPath.startsWith(config.localPath);
+				});
+
+				if (matchedConfigs.length === 0) {
+					throw new Error('No matching FTP configuration found');
+				}
+
+				// 选择配置
+				let selectedConfig;
+				if (matchedConfigs.length === 1) {
+					selectedConfig = matchedConfigs[0];
+				} else {
+					const selected = await vscode.window.showQuickPick(
+						matchedConfigs.map(config => ({
+							label: config.name,
+							description: `${config.host}:${config.port} (${config.deployPath})`,
+							config: config
+						})),
+						{ placeHolder: 'Select source server' }
+					);
+					if (!selected) {
+						return;
+					}
+					selectedConfig = selected.config;
+				}
+
+				// 计算远程路径
+				const relativePath = localPath.substring(selectedConfig.localPath.length);
+				const remotePath = selectedConfig.deployPath + relativePath;
+
+				// 确保本地目录存在
+				const localDir = path.dirname(localPath);
+				await vscode.workspace.fs.createDirectory(vscode.Uri.file(localDir));
+
+				// 显示进度提示
+				await vscode.window.withProgress({
+					location: vscode.ProgressLocation.Notification,
+					title: "Downloading file",
+					cancellable: false
+				}, async (progress) => {
+					progress.report({ message: 'Preparing download...' });
+					
+					try {
+						// 下载文件
+						await downloadFile(selectedConfig, remotePath, localPath);
+						
+						// 如果文件已经在编辑器中打开，刷新内容
+						const documents = vscode.workspace.textDocuments;
+						const openDocument = documents.find(doc => doc.uri.fsPath === localPath);
+						if (openDocument) {
+							const document = await vscode.workspace.openTextDocument(fileUri);
+							if (vscode.window.activeTextEditor?.document === openDocument) {
+								await vscode.window.showTextDocument(document, { preview: false });
+							}
+						}
+
+						vscode.window.showInformationMessage(`Successfully downloaded from ${remotePath}`);
+					} catch (error) {
+						throw new Error(`Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+					}
+				});
+
+			} catch (error) {
+				vscode.window.showErrorMessage('Download failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+			}
+		})
+	);
+
 	// 添加下载文件的函数
 	async function downloadFile(config: any, remotePath: string, localPath: string): Promise<void> {
 		return new Promise((resolve, reject) => {
