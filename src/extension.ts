@@ -1,6 +1,6 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as os from 'os';
 import { FTPExplorerProvider } from './ftpExplorer';
 
 // This method is called when your extension is activated
@@ -607,6 +607,164 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		})
 	);
+
+	// 注册文件对比命令
+	context.subscriptions.push(
+		vscode.commands.registerCommand('idea-ftp.diffFile', async (resource?: vscode.Uri) => {
+			try {
+				let fileUri: vscode.Uri | undefined = resource;
+				
+				if (!fileUri) {
+					const activeEditor = vscode.window.activeTextEditor;
+					if (!activeEditor) {
+						throw new Error('Please select a file to compare');
+					}
+					fileUri = activeEditor.document.uri;
+				}
+
+				if (fileUri.scheme !== 'file') {
+					throw new Error('Can only compare files from local file system');
+				}
+
+				// 获取本地文件路径
+				const localPath = fileUri.fsPath;
+
+				// 获取所有配置
+				const configs = await configManager.loadConfigs();
+				if (!configs || configs.length === 0) {
+					throw new Error('No FTP configuration found');
+				}
+
+				// 找到匹配的配置
+				const matchedConfigs = configs.filter(config => {
+					if (!config.localPath || !config.deployPath) {
+						return false;
+					}
+					return localPath.startsWith(config.localPath);
+				});
+
+				if (matchedConfigs.length === 0) {
+					throw new Error('No matching FTP configuration found');
+				}
+
+				// 选择配置
+				let selectedConfig;
+				if (matchedConfigs.length === 1) {
+					selectedConfig = matchedConfigs[0];
+				} else {
+					const selected = await vscode.window.showQuickPick(
+						matchedConfigs.map(config => ({
+							label: config.name,
+							description: `${config.host}:${config.port} (${config.deployPath})`,
+							config: config
+						})),
+						{ placeHolder: 'Select target server' }
+					);
+					if (!selected) {
+						return;
+					}
+					selectedConfig = selected.config;
+				}
+
+				// 计算远程路径
+				const relativePath = localPath.substring(selectedConfig.localPath.length);
+				const remotePath = selectedConfig.deployPath + relativePath;
+
+				// 创建临时文件来存储远程文件内容
+				const tempFile = vscode.Uri.file(path.join(os.tmpdir(), `vscode-ftp-${Date.now()}-${path.basename(localPath)}`));
+				
+				// 显示进度提示
+				await vscode.window.withProgress({
+					location: vscode.ProgressLocation.Notification,
+					title: "Downloading remote file",
+					cancellable: false
+				}, async (progress) => {
+					progress.report({ message: 'Preparing download...' });
+					
+					// 下载远程文件
+					await downloadFile(selectedConfig, remotePath, tempFile.fsPath);
+				});
+
+				// 打开差异对比视图
+				const title = `${path.basename(localPath)} (Local ↔ Remote)`;
+				await vscode.commands.executeCommand('vscode.diff',
+					fileUri,                    // 本地文件
+					tempFile,                   // 远程文件（临时）
+					title                       // 标题
+				);
+
+			} catch (error) {
+				vscode.window.showErrorMessage('Compare failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+			}
+		})
+	);
+
+	// 添加下载文件的函数
+	async function downloadFile(config: any, remotePath: string, localPath: string): Promise<void> {
+		return new Promise((resolve, reject) => {
+			if (config.type === 'sftp') {
+				const Client = require('ssh2').Client;
+				const conn = new Client();
+				
+				conn.on('ready', () => {
+					conn.sftp((err: Error, sftp: any) => {
+						if (err) {
+							conn.end();
+							reject(err);
+							return;
+						}
+
+						sftp.fastGet(remotePath, localPath, (err: Error) => {
+							conn.end();
+							if (err) {
+								reject(err);
+							} else {
+								resolve();
+							}
+						});
+					});
+				}).connect({
+					host: config.host,
+					port: config.port,
+					username: config.username,
+					password: config.password,
+					privateKey: config.privateKeyPath ? require('fs').readFileSync(config.privateKeyPath) : undefined,
+					passphrase: config.passphrase
+				});
+			} else {
+				const Client = require('ftp');
+				const ftp = new Client();
+				
+				ftp.on('ready', () => {
+					ftp.get(remotePath, (err: Error, stream: any) => {
+						if (err) {
+							ftp.end();
+							reject(err);
+							return;
+						}
+
+						const writeStream = require('fs').createWriteStream(localPath);
+						stream.pipe(writeStream);
+						
+						writeStream.on('finish', () => {
+							ftp.end();
+							resolve();
+						});
+
+						writeStream.on('error', (err: Error) => {
+							ftp.end();
+							reject(err);
+						});
+					});
+				}).connect({
+					host: config.host,
+					port: config.port,
+					user: config.username,
+					password: config.password
+				});
+			}
+		});
+	}
 }
 
 // 修改配置保存函数，添加类型定义

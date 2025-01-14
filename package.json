@@ -59,6 +59,11 @@
         "command": "idea-ftp.uploadFile",
         "title": "Upload to FTP server (⌥⌘U / Alt+Ctrl+U)",
         "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "idea-ftp.diffFile",
+        "title": "Diff - Local file and FTP server file",
+        "icon": "$(diff)"
       }
     ],
     "menus": {
@@ -102,7 +107,11 @@
       "idea-ftp.upload": [
         {
           "command": "idea-ftp.uploadFile",
-          "group": "navigation"
+          "group": "navigation@1"
+        },
+        {
+          "command": "idea-ftp.diffFile",
+          "group": "navigation@2"
         }
       ]
     },
