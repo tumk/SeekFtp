@@ -773,7 +773,7 @@ class RemoteDirectoryPicker {
 	async showPicker(): Promise<void> {
 		const pickerPanel = vscode.window.createWebviewPanel(
 			'remotePicker',
-			`${this.config.name} - ${this.config.host}`,  // 修改标题显示
+			`${this.config.name} - ${this.config.host}`,
 			vscode.ViewColumn.Two,
 			{
 				enableScripts: true,
@@ -807,7 +807,6 @@ class RemoteDirectoryPicker {
 				case 'openFile':
 					try {
 						await this.openRemoteFile(message.path);
-						pickerPanel.dispose();
 					} catch (error) {
 						vscode.window.showErrorMessage('打开文件失败：' + (error instanceof Error ? error.message : '未知错误'));
 					}
@@ -940,8 +939,8 @@ class RemoteDirectoryPicker {
 								});
 							};
 						} else {
-							// 文件双击事件
-							li.ondblclick = () => {
+							// 修改为单击打开文件
+							li.onclick = () => {
 								vscode.postMessage({
 									command: 'openFile',
 									path: item.path
@@ -990,7 +989,6 @@ class RemoteDirectoryPicker {
 					}
 
 					try {
-						// 读取远程文件内容
 						let chunks: Buffer[] = [];
 						stream.on('data', (chunk: Buffer) => {
 							chunks.push(chunk);
@@ -1000,18 +998,15 @@ class RemoteDirectoryPicker {
 							client.end();
 							try {
 								const content = Buffer.concat(chunks).toString('utf8');
-								
-								// 创建临时文件
 								const fileName = path.split('/').pop() || 'untitled';
 								const tempUri = vscode.Uri.file(this.getTempFilePath(fileName));
 								
-								// 写入内容到临时文件
 								await vscode.workspace.fs.writeFile(
 									tempUri,
 									Buffer.from(content, 'utf8')
 								);
 
-								// 打开临时文件
+								// 打开文件但不关闭远程目录浏览器
 								const document = await vscode.workspace.openTextDocument(tempUri);
 								await vscode.window.showTextDocument(document, {
 									preview: false,
