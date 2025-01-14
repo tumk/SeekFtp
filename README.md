@@ -1,71 +1,61 @@
-# idea-ftp README
+# IDEA FTP 插件使用指南
 
-This is the README for your extension "idea-ftp". After writing up a brief description, we recommend including the following sections.
+## 功能特性
+- FTP/SFTP 连接管理
+- 文件上传/下载
+- 文件比较
+- 远程文件浏览
 
-## Features
+## 配置说明
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+### 1. 添加 FTP 连接
+1. 打开命令面板 (Ctrl+Shift+P)
+2. 输入 "IDEA FTP: 添加连接"
+3. 填写以下信息：
+   - 名称：连接名称
+   - 类型：FTP 或 SFTP
+   - 主机：服务器地址
+   - 端口：FTP(21) 或 SFTP(22)
+   - 用户名
+   - 密码
+   - 本地路径：项目本地路径
+   - 部署路径：服务器上的目标路径
 
-For example if there is an image subfolder under your extension project workspace:
+### 2. 使用方法
 
-\!\[feature X\]\(images/feature-x.png\)
+#### 文件上传
+1. 在 VS Code 左侧 FTP 资源管理器中选择已配置的连接
+2. 右键点击要上传的文件/文件夹
+3. 选择 "上传到服务器"
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+#### 文件下载
+1. 在 FTP 资源管理器中展开远程连接
+2. 右键点击远程文件
+3. 选择 "下载到本地"
 
-## Requirements
+#### 文件比较
+1. 在 FTP 资源管理器中选择远程文件
+2. 右键选择 "与本地文件比较"
+3. 系统会打开对比视图，显示本地和远程文件的差异
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+## 快捷键
+- 刷新连接：F5
+- 断开连接：右键菜单 "断开连接"
+- 重新连接：右键菜单 "连接"
 
-## Extension Settings
+## 注意事项
+1. 首次使用需要先配置连接信息
+2. 建议在上传前先进行文件比较
+3. SFTP 连接支持密码和密钥认证
+4. 确保有正确的文件读写权限
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+## 常见问题
+1. 连接失败
+   - 检查网络连接
+   - 验证服务器地址和端口
+   - 确认用户名密码正确
 
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+2. 上传/下载失败
+   - 检查文件权限
+   - 确认路径配置正确
+   - 验证磁盘空间充足
