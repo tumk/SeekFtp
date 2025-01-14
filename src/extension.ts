@@ -504,6 +504,19 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	context.subscriptions.push(disposable);
+
+	// 注册清理临时文件的命令
+	context.subscriptions.push(
+		vscode.workspace.onDidCloseTextDocument(async (document) => {
+			if (document.uri.fsPath.includes('vscode-ftp-')) {
+				try {
+					await vscode.workspace.fs.delete(document.uri);
+				} catch (error) {
+					console.error('Failed to delete temp file:', error);
+				}
+			}
+		})
+	);
 }
 
 // 修改配置保存函数，添加类型定义
@@ -965,37 +978,59 @@ class RemoteDirectoryPicker {
 	}
 
 	private async openRemoteFile(path: string): Promise<void> {
-		// 实现远程文件打开逻辑
 		return new Promise((resolve, reject) => {
 			const client = this.config.type === 'ftp' ? new (require('ftp'))() : new (require('ssh2').Client)();
 
 			client.on('ready', () => {
-				client.get(path, (err: Error | null, stream: any) => {
+				client.get(path, async (err: Error | null, stream: any) => {
 					if (err) {
 						client.end();
 						reject(err);
 						return;
 					}
 
-					let content = '';
-					stream.on('data', (chunk: Buffer) => {
-						content += chunk.toString('utf8');
-					});
+					try {
+						// 读取远程文件内容
+						let chunks: Buffer[] = [];
+						stream.on('data', (chunk: Buffer) => {
+							chunks.push(chunk);
+						});
 
-					stream.on('end', async () => {
-						client.end();
-						try {
-							// 创建临时文件并打开
-							const document = await vscode.workspace.openTextDocument({
-								content: content,
-								language: this.getLanguageFromPath(path)
-							});
-							await vscode.window.showTextDocument(document);
-							resolve();
-						} catch (error) {
+						stream.on('end', async () => {
+							client.end();
+							try {
+								const content = Buffer.concat(chunks).toString('utf8');
+								
+								// 创建临时文件
+								const fileName = path.split('/').pop() || 'untitled';
+								const tempUri = vscode.Uri.file(this.getTempFilePath(fileName));
+								
+								// 写入内容到临时文件
+								await vscode.workspace.fs.writeFile(
+									tempUri,
+									Buffer.from(content, 'utf8')
+								);
+
+								// 打开临时文件
+								const document = await vscode.workspace.openTextDocument(tempUri);
+								await vscode.window.showTextDocument(document, {
+									preview: false,
+									viewColumn: vscode.ViewColumn.One
+								});
+								resolve();
+							} catch (error) {
+								reject(error);
+							}
+						});
+
+						stream.on('error', (error: Error) => {
+							client.end();
 							reject(error);
-						}
-					});
+						});
+					} catch (error) {
+						client.end();
+						reject(error);
+					}
 				});
 			});
 
@@ -1019,17 +1054,46 @@ class RemoteDirectoryPicker {
 		});
 	}
 
+	private getTempFilePath(fileName: string): string {
+		const os = require('os');
+		const path = require('path');
+		const timestamp = new Date().getTime();
+		return path.join(os.tmpdir(), `vscode-ftp-${timestamp}-${fileName}`);
+	}
+
 	private getLanguageFromPath(path: string): string {
 		const ext = path.split('.').pop()?.toLowerCase() || '';
 		const languageMap: { [key: string]: string } = {
 			'js': 'javascript',
 			'ts': 'typescript',
+			'jsx': 'javascriptreact',
+			'tsx': 'typescriptreact',
 			'json': 'json',
 			'html': 'html',
+			'htm': 'html',
 			'css': 'css',
+			'scss': 'scss',
+			'less': 'less',
 			'php': 'php',
 			'py': 'python',
-			// 添加更多文件类型映射
+			'java': 'java',
+			'c': 'c',
+			'cpp': 'cpp',
+			'h': 'c',
+			'hpp': 'cpp',
+			'md': 'markdown',
+			'xml': 'xml',
+			'yaml': 'yaml',
+			'yml': 'yaml',
+			'sql': 'sql',
+			'sh': 'shellscript',
+			'bash': 'shellscript',
+			'vue': 'vue',
+			'go': 'go',
+			'rs': 'rust',
+			'rb': 'ruby',
+			'pl': 'perl',
+			'lua': 'lua'
 		};
 		return languageMap[ext] || 'plaintext';
 	}
