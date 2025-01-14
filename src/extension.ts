@@ -517,6 +517,96 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		})
 	);
+
+	// 注册上传文件命令
+	context.subscriptions.push(
+		vscode.commands.registerCommand('idea-ftp.uploadFile', async (resource?: vscode.Uri) => {
+			try {
+				let fileUri: vscode.Uri | undefined = resource;
+				
+				// 如果没有直接传入资源（比如通过快捷键调用），则尝试获取当前活动编辑器的文件
+				if (!fileUri) {
+					const activeEditor = vscode.window.activeTextEditor;
+					if (!activeEditor) {
+						throw new Error('请先选择要上传的文件');
+					}
+					fileUri = activeEditor.document.uri;
+				}
+
+				// 确保是文件系统的文件
+				if (fileUri.scheme !== 'file') {
+					throw new Error('只能上传本地文件系统中的文件');
+				}
+
+				// 获取所有配置
+				const configs = await configManager.loadConfigs();
+				if (!configs || configs.length === 0) {
+					throw new Error('未找到 FTP 配置，请先添加配置');
+				}
+
+				// 获取文件的本地路径
+				const localPath = fileUri.fsPath;
+
+				// 找到匹配的配置后，添加部署路径验证
+				const matchedConfigs = configs.filter(config => {
+					// 验证配置中必须有 localPath 和 deployPath
+					if (!config.localPath || !config.deployPath) {
+						return false;
+					}
+					return localPath.startsWith(config.localPath);
+				});
+
+				if (matchedConfigs.length === 0) {
+					throw new Error('未找到匹配的 FTP 配置，请确保：\n1. 文件在配置的本地路径下\n2. FTP 配置中已设置本地路径和部署路径');
+				}
+
+				// 如果有多个匹配的配置，让用户选择
+				let selectedConfig;
+				if (matchedConfigs.length === 1) {
+					selectedConfig = matchedConfigs[0];
+				} else {
+					const selected = await vscode.window.showQuickPick(
+						matchedConfigs.map(config => ({
+							label: config.name,
+							description: `${config.host}:${config.port} (${config.deployPath})`,
+							config: config
+						})),
+						{ 
+							placeHolder: '选择要上传到的服务器',
+							title: '请选择目标服务器'
+						}
+					);
+					if (!selected) {
+						return;
+					}
+					selectedConfig = selected.config;
+				}
+
+				// 再次验证选中的配置
+				if (!selectedConfig.deployPath) {
+					throw new Error(`配置 "${selectedConfig.name}" 未设置部署路径，请先在配置中设置部署路径`);
+				}
+
+				// 计算远程路径
+				const relativePath = localPath.substring(selectedConfig.localPath.length);
+				const remotePath = selectedConfig.deployPath + relativePath;
+
+				// 显示进度提示
+				await vscode.window.withProgress({
+					location: vscode.ProgressLocation.Notification,
+					title: "正在上传文件",
+					cancellable: false
+				}, async (progress) => {
+					progress.report({ message: '准备上传...' });
+					await uploadFile(selectedConfig, localPath, remotePath);
+				});
+
+				vscode.window.showInformationMessage(`文件已成功上传到 ${remotePath}`);
+			} catch (error) {
+				vscode.window.showErrorMessage('上传失败: ' + (error instanceof Error ? error.message : '未知错误'));
+			}
+		})
+	);
 }
 
 // 修改配置保存函数，添加类型定义
@@ -1130,5 +1220,141 @@ class RemoteDirectoryPicker {
 				reject(error);
 			}
 		});
+	}
+}
+
+// 添加上传文件的具体实现
+async function uploadFile(config: FTPConfig, localPath: string, remotePath: string): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const fs = require('fs');
+		
+		if (config.type === 'sftp') {
+			const Client = require('ssh2').Client;
+			const conn = new Client();
+
+			conn.on('ready', () => {
+				conn.sftp((err: Error, sftp: any) => {
+					if (err) {
+						conn.end();
+						reject(err);
+						return;
+					}
+
+					// 确保远程目录存在
+					const remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'));
+					createRemoteDirectory(sftp, remoteDir).then(() => {
+						// 上传文件
+						sftp.fastPut(localPath, remotePath, (err: Error) => {
+							conn.end();
+							if (err) {
+								reject(err);
+							} else {
+								resolve();
+							}
+						});
+					}).catch(err => {
+						conn.end();
+						reject(err);
+					});
+				});
+			}).connect({
+				host: config.host,
+				port: config.port,
+				username: config.username,
+				password: config.password,
+				privateKey: config.privateKeyPath ? fs.readFileSync(config.privateKeyPath) : undefined,
+				passphrase: config.passphrase
+			});
+
+			conn.on('error', (err: Error) => {
+				reject(err);
+			});
+		} else {
+			// FTP 上传
+			const Client = require('ftp');
+			const ftp = new Client();
+
+			ftp.on('ready', () => {
+				// 确保远程目录存在
+				const remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'));
+				createRemoteDirectoryFTP(ftp, remoteDir).then(() => {
+					// 上传文件
+					ftp.put(localPath, remotePath, (err: Error) => {
+						ftp.end();
+						if (err) {
+							reject(err);
+						} else {
+							resolve();
+						}
+					});
+				}).catch(err => {
+					ftp.end();
+					reject(err);
+				});
+			});
+
+			ftp.on('error', (err: Error) => {
+				reject(err);
+			});
+
+			ftp.connect({
+				host: config.host,
+				port: config.port,
+				user: config.username,
+				password: config.password
+			});
+		}
+	});
+}
+
+// 递归创建远程目录 (SFTP)
+async function createRemoteDirectory(sftp: any, dir: string): Promise<void> {
+	const dirs = dir.split('/').filter(Boolean);
+	let currentDir = '';
+
+	for (const d of dirs) {
+		currentDir += '/' + d;
+		try {
+			await new Promise((resolve, reject) => {
+				sftp.stat(currentDir, (err: Error, stats: any) => {
+					if (err) {
+						sftp.mkdir(currentDir, (err: Error) => {
+							if (err) {
+								reject(err);
+							} else {
+								resolve(undefined);
+							}
+						});
+					} else {
+						resolve(undefined);
+					}
+				});
+			});
+		} catch (error) {
+			throw new Error(`创建目录 ${currentDir} 失败: ${error instanceof Error ? error.message : '未知错误'}`);
+		}
+	}
+}
+
+// 递归创建远程目录 (FTP)
+async function createRemoteDirectoryFTP(ftp: any, dir: string): Promise<void> {
+	const dirs = dir.split('/').filter(Boolean);
+	let currentDir = '';
+
+	for (const d of dirs) {
+		currentDir += '/' + d;
+		try {
+			await new Promise((resolve, reject) => {
+				ftp.mkdir(currentDir, true, (err: Error) => {
+					if (err) {
+						reject(err);
+					} else {
+						resolve(undefined);
+					}
+				});
+			});
+		} catch (error) {
+			throw new Error(`创建目录 ${currentDir} 失败: ${error instanceof Error ? error.message : '未知错误'}`);
+		}
 	}
 }
