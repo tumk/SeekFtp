@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
-import * as ftp from 'ftp';
-import * as ssh2 from 'ssh2';
+import FTP from 'ftp';
+import { Client as SSHClient } from 'ssh2';
 import * as path from 'path';
+import * as fs from 'fs';
 
 export class FTPExplorerProvider implements vscode.TreeDataProvider<FTPItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<FTPItem | undefined | null | void> = new vscode.EventEmitter<FTPItem | undefined | null | void>();
@@ -56,7 +57,7 @@ export class FTPExplorerProvider implements vscode.TreeDataProvider<FTPItem> {
 
     private async getFTPItems(config: any, remotePath: string): Promise<FTPItem[]> {
         return new Promise((resolve, reject) => {
-            const client = new ftp();
+            const client = new FTP();
             client.on('ready', () => {
                 client.list(remotePath, (err, list) => {
                     client.end();
@@ -78,7 +79,7 @@ export class FTPExplorerProvider implements vscode.TreeDataProvider<FTPItem> {
 
     private async getSFTPItems(config: any, remotePath: string): Promise<FTPItem[]> {
         return new Promise((resolve, reject) => {
-            const conn = new ssh2.Client();
+            const conn = new SSHClient();
             conn.on('ready', () => {
                 conn.sftp((err, sftp) => {
                     if (err) {
@@ -107,10 +108,10 @@ export class FTPExplorerProvider implements vscode.TreeDataProvider<FTPItem> {
     async connect(item: FTPConnectionItem): Promise<void> {
         try {
             if (item.config.type === 'sftp') {
-                const conn = new ssh2.Client();
+                const conn = new SSHClient();
                 this.connections.set(item.config.name, conn);
             } else {
-                const client = new ftp();
+                const client = new FTP();
                 this.connections.set(item.config.name, client);
             }
             item.status = 'connected';

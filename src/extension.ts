@@ -1,7 +1,11 @@
 import * as vscode from 'vscode';
+import FTP from 'ftp';
+import { Client as SSHClient } from 'ssh2';
 import * as path from 'path';
-import * as os from 'os';
+import * as fs from 'fs';
+import * as SftpClient from 'ssh2-sftp-client';
 import { FTPExplorerProvider } from './ftpExplorer';
+import * as os from 'os';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -13,6 +17,111 @@ export function activate(context: vscode.ExtensionContext) {
 	
 	// 注册 FTP 资源管理器视图
 	vscode.window.registerTreeDataProvider('ftpExplorer', ftpExplorerProvider);
+
+	let disposable = vscode.commands.registerCommand('idea-ftp.openFTPConfig', () => {
+		const panel = vscode.window.createWebviewPanel(
+			'ftpConfig',
+			'FTP Configuration',
+			vscode.ViewColumn.One,
+			{
+				enableScripts: true,
+				retainContextWhenHidden: true
+			}
+		);
+
+		panel.webview.html = getWebviewContent();
+
+		// 处理来自 WebView 的消息
+		panel.webview.onDidReceiveMessage(
+			async message => {
+				console.log('Received message from webview:', message);
+				
+				switch (message.command) {
+					case 'selectLocalPath':
+						try {
+							const result = await vscode.window.showOpenDialog({
+								canSelectFiles: false,
+								canSelectFolders: true,
+								canSelectMany: false,
+								title: '选择本地路径'
+							});
+							if (result && result.length > 0) {
+								panel.webview.postMessage({
+									command: 'setLocalPath',
+									path: result[0].fsPath
+								});
+							}
+						} catch (error) {
+							vscode.window.showErrorMessage('选择本地路径失败');
+						}
+						break;
+
+					case 'selectRemotePath':
+						try {
+							const remotePicker = new RemoteDirectoryPicker(panel, message.config);
+							await remotePicker.showPicker();
+						} catch (error) {
+							vscode.window.showErrorMessage('浏览远程目录失败：' + (error instanceof Error ? error.message : '未知错误'));
+						}
+						break;
+
+					case 'testConnection':
+						try {
+							const config = message.config;
+							// 这里应该实现实际的连接测试逻辑
+							await testFTPConnection(config);
+							vscode.window.showInformationMessage('连接测试成功！');
+						} catch (error) {
+							vscode.window.showErrorMessage('连接测试失败：' + (error instanceof Error ? error.message : '未知错误'));
+						}
+						break;
+
+					case 'saveConfig':
+						try {
+							const updatedConfigs = await configManager.saveConfig(message.config, message.index);
+							panel.webview.postMessage({
+								command: 'configSaved',
+								connections: updatedConfigs
+							});
+							vscode.window.showInformationMessage('配置已保存');
+						} catch (error) {
+							vscode.window.showErrorMessage('保存配置失败：' + (error instanceof Error ? error.message : '未知错误'));
+						}
+						break;
+
+					case 'deleteConfig':
+						try {
+							console.log('Deleting config at index:', message.index);
+							const updatedConfigs = await configManager.deleteConfig(message.index);
+							panel.webview.postMessage({
+								command: 'configDeleted',
+								connections: updatedConfigs
+							});
+							vscode.window.showInformationMessage('连接已删除');
+						} catch (error) {
+							console.error('Delete config failed:', error);
+							vscode.window.showErrorMessage('删除配置失败：' + (error instanceof Error ? error.message : '未知错误'));
+						}
+						break;
+				}
+			},
+			undefined,
+			context.subscriptions
+		);
+
+		// 初始加载配置
+		configManager.loadConfigs().then(configs => {
+			panel.webview.postMessage({
+				command: 'loadConnections',
+				connections: configs
+			});
+		}).catch(error => {
+			console.error('Load configurations failed:', error);
+			vscode.window.showErrorMessage('加载配置失败');
+		});
+	});
+
+	context.subscriptions.push(disposable);
 
 	// 注册命令
 	context.subscriptions.push(
@@ -399,111 +508,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// 修改 activate 函数
 	const configManager = ConfigurationManager.getInstance();
-
-	let disposable = vscode.commands.registerCommand('idea-ftp.openFTPConfig', () => {
-		const panel = vscode.window.createWebviewPanel(
-			'ftpConfig',
-			'FTP Configuration',
-			vscode.ViewColumn.One,
-			{
-				enableScripts: true,
-				retainContextWhenHidden: true
-			}
-		);
-
-		panel.webview.html = getWebviewContent();
-
-		// 处理来自 WebView 的消息
-		panel.webview.onDidReceiveMessage(
-			async message => {
-				console.log('Received message from webview:', message);
-				
-				switch (message.command) {
-					case 'selectLocalPath':
-						try {
-							const result = await vscode.window.showOpenDialog({
-								canSelectFiles: false,
-								canSelectFolders: true,
-								canSelectMany: false,
-								title: '选择本地路径'
-							});
-							if (result && result.length > 0) {
-								panel.webview.postMessage({
-									command: 'setLocalPath',
-									path: result[0].fsPath
-								});
-							}
-						} catch (error) {
-							vscode.window.showErrorMessage('选择本地路径失败');
-						}
-						break;
-
-					case 'selectRemotePath':
-						try {
-							const remotePicker = new RemoteDirectoryPicker(panel, message.config);
-							await remotePicker.showPicker();
-						} catch (error) {
-							vscode.window.showErrorMessage('浏览远程目录失败：' + (error instanceof Error ? error.message : '未知错误'));
-						}
-						break;
-
-					case 'testConnection':
-						try {
-							const config = message.config;
-							// 这里应该实现实际的连接测试逻辑
-							await testFTPConnection(config);
-							vscode.window.showInformationMessage('连接测试成功！');
-						} catch (error) {
-							vscode.window.showErrorMessage('连接测试失败：' + (error instanceof Error ? error.message : '未知错误'));
-						}
-						break;
-
-					case 'saveConfig':
-						try {
-							const updatedConfigs = await configManager.saveConfig(message.config, message.index);
-							panel.webview.postMessage({
-								command: 'configSaved',
-								connections: updatedConfigs
-							});
-							vscode.window.showInformationMessage('配置已保存');
-						} catch (error) {
-							vscode.window.showErrorMessage('保存配置失败：' + (error instanceof Error ? error.message : '未知错误'));
-						}
-						break;
-
-					case 'deleteConfig':
-						try {
-							console.log('Deleting config at index:', message.index);
-							const updatedConfigs = await configManager.deleteConfig(message.index);
-							panel.webview.postMessage({
-								command: 'configDeleted',
-								connections: updatedConfigs
-							});
-							vscode.window.showInformationMessage('连接已删除');
-						} catch (error) {
-							console.error('Delete config failed:', error);
-							vscode.window.showErrorMessage('删除配置失败：' + (error instanceof Error ? error.message : '未知错误'));
-						}
-						break;
-				}
-			},
-			undefined,
-			context.subscriptions
-		);
-
-		// 初始加载配置
-		configManager.loadConfigs().then(configs => {
-			panel.webview.postMessage({
-				command: 'loadConnections',
-				connections: configs
-			});
-		}).catch(error => {
-			console.error('Load configurations failed:', error);
-			vscode.window.showErrorMessage('加载配置失败');
-		});
-	});
-
-	context.subscriptions.push(disposable);
 
 	// 注册清理临时文件的命令
 	context.subscriptions.push(
@@ -1326,7 +1330,7 @@ class RemoteDirectoryPicker {
 
 	private async openRemoteFile(path: string): Promise<void> {
 		return new Promise((resolve, reject) => {
-			const client = this.config.type === 'ftp' ? new (require('ftp'))() : new (require('ssh2').Client)();
+			const client = this.config.type === 'ftp' ? new FTP() : new SSHClient();
 
 			client.on('ready', () => {
 				client.get(path, async (err: Error | null, stream: any) => {
@@ -1443,7 +1447,7 @@ class RemoteDirectoryPicker {
 
 	private async listDirectory(path: string): Promise<any[]> {
 		return new Promise((resolve, reject) => {
-			const client = this.config.type === 'ftp' ? new (require('ftp'))() : new (require('ssh2').Client)();
+			const client = this.config.type === 'ftp' ? new FTP() : new SSHClient();
 
 			client.on('ready', () => {
 				client.list(path, (err: Error | null, list: any[]) => {

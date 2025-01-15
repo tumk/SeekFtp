@@ -2,7 +2,7 @@
 	"name": "idea-ftp",
 	"displayName": "IDEA FTP",
 	"description": "\"FTP/SFTP Integration for VS Code\" 是一款功能强大的 FTP/SFTP 插件，专为开发者设计，提供与 IntelliJ IDEA 相媲美的远程文件管理体验。通过该插件，您可以轻松连接远程服务器，直接在 VS Code 中浏览、编辑和上传文件。支持自动同步、多服务器管理、文件差异对比、断点续传等功能，帮助您高效管理远程代码，提升开发效率。",
-	"version": "0.0.2",
+	"version": "0.0.7",
 	"engines": {
 		"vscode": "^1.80.0"
 	},
@@ -11,6 +11,20 @@
 		"type": "git",
 		"url": "https://github.com/tumk/idea-ftp.git"
 	},
+	"marketplace": {
+		"public": true
+	},
+	"galleryBanner": {
+		"color": "#C80000",
+		"theme": "dark"
+	},
+	"preview": true,
+	"keywords": [
+		"ftp",
+		"sftp",
+		"remote",
+		"file transfer"
+	],
 	"categories": [
 		"Other"
 	],
@@ -22,20 +36,25 @@
 	"main": "./dist/extension.js",
 	"contributes": {
 		"viewsContainers": {
-			"activitybar": [{
-				"id": "idea-ftp-explorer",
-				"title": "IDEA FTP",
-				"icon": "resources/ftp-icon.svg"
-			}]
+			"activitybar": [
+				{
+					"id": "idea-ftp-explorer",
+					"title": "IDEA FTP",
+					"icon": "resources/ftp-icon.svg"
+				}
+			]
 		},
 		"views": {
-			"idea-ftp-explorer": [{
-				"id": "ftpExplorer",
-				"name": "FTP 连接",
-				"type": "tree"
-			}]
+			"idea-ftp-explorer": [
+				{
+					"id": "ftpExplorer",
+					"name": "FTP 连接",
+					"type": "tree"
+				}
+			]
 		},
-		"commands": [{
+		"commands": [
+			{
 				"command": "idea-ftp.openFTPConfig",
 				"title": "打开 FTP 配置"
 			},
@@ -71,7 +90,8 @@
 			}
 		],
 		"menus": {
-			"view/title": [{
+			"view/title": [
+				{
 					"command": "idea-ftp.openFTPConfig",
 					"when": "view == ftpExplorer",
 					"group": "navigation"
@@ -82,7 +102,8 @@
 					"group": "navigation"
 				}
 			],
-			"view/item/context": [{
+			"view/item/context": [
+				{
 					"command": "idea-ftp.connect",
 					"when": "view == ftpExplorer && viewItem == disconnected",
 					"group": "inline"
@@ -93,16 +114,21 @@
 					"group": "inline"
 				}
 			],
-			"editor/context": [{
-				"submenu": "idea-ftp.upload",
-				"group": "navigation"
-			}],
-			"explorer/context": [{
-				"submenu": "idea-ftp.upload",
-				"group": "navigation",
-				"when": "resourceScheme == file"
-			}],
-			"idea-ftp.upload": [{
+			"editor/context": [
+				{
+					"submenu": "idea-ftp.upload",
+					"group": "navigation"
+				}
+			],
+			"explorer/context": [
+				{
+					"submenu": "idea-ftp.upload",
+					"group": "navigation",
+					"when": "resourceScheme == file"
+				}
+			],
+			"idea-ftp.upload": [
+				{
 					"command": "idea-ftp.uploadFile",
 					"group": "navigation@1"
 				},
@@ -116,10 +142,12 @@
 				}
 			]
 		},
-		"submenus": [{
-			"id": "idea-ftp.upload",
-			"label": "IDEA-FTP"
-		}],
+		"submenus": [
+			{
+				"id": "idea-ftp.upload",
+				"label": "IDEA-FTP"
+			}
+		],
 		"configuration": {
 			"title": "IDEA FTP",
 			"properties": {
@@ -130,32 +158,43 @@
 				}
 			}
 		},
-		"keybindings": [{
-			"command": "idea-ftp.uploadFile",
-			"key": "ctrl+alt+u",
-			"mac": "alt+cmd+u",
-			"when": "editorFocus || explorerFocus"
-		}]
+		"keybindings": [
+			{
+				"command": "idea-ftp.uploadFile",
+				"key": "ctrl+alt+u",
+				"mac": "alt+cmd+u",
+				"when": "editorFocus || explorerFocus"
+			}
+		]
 	},
 	"scripts": {
-		"vscode:prepublish": "pnpm run compile",
-		"compile": "tsc -p ./",
-		"watch": "tsc -watch -p ./",
-		"pretest": "pnpm run compile",
-		"lint": "eslint src --ext ts",
-		"test": "node ./out/test/runTest.js"
+		"vscode:prepublish": "NODE_ENV=production pnpm run compile",
+		"compile": "node ./esbuild.config.js",
+		"watch": "node ./esbuild.config.js --watch",
+		"package": "pnpm vscode:prepublish && pnpm exec vsce package"
 	},
 	"devDependencies": {
 		"@types/ftp": "^0.3.36",
 		"@types/mocha": "^10.0.10",
 		"@types/node": "^22.10.5",
+		"@types/ssh2": "^1.11.19",
+		"@types/ssh2-sftp-client": "^9.0.4",
 		"@types/vscode": "^1.80.0",
-		"ftp": "^0.3.10",
-		"typescript": "^5.7.3",
-		"vsce": "^2.15.0"
+		"@vscode/vsce": "^2.15.0",
+		"chai": "^5.1.2",
+		"esbuild": "^0.19.12",
+		"eslint": "^9.18.0",
+		"mocha": "^11.0.1",
+		"typescript": "^5.7.3"
 	},
 	"dependencies": {
-		"@types/ssh2": "^1.15.3",
-		"ssh2": "^1.16.0"
-	}
+		"ftp": "^0.3.10",
+		"ssh2": "^1.16.0",
+		"ssh2-sftp-client": "^9.1.0"
+	},
+	"bundleDependencies": [
+		"ftp",
+		"ssh2",
+		"ssh2-sftp-client"
+	]
 }
