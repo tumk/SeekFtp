@@ -12,7 +12,24 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
-!node_modules/ssh2
-!node_modules/asn1
-!node_modules/safer-buffer
-!node_modules/tweetnacl
+!node_modules/ssh2/**
+!node_modules/cpu-features/**
+!node_modules/ftp/**
+!node_modules/asn1/**
+!node_modules/safer-buffer/**
+!node_modules/tweetnacl/**
+.git/**
+**/tsconfig.json
+**/.eslintrc.json
+.github/**
+
+# 排除所有 node_modules 中不需要的文件
+node_modules/**/*.md
+node_modules/**/*.ts
+node_modules/**/*.map
+node_modules/**/test/**
+node_modules/**/.github/**
+
+# 确保必要的webpack依赖
+!node_modules/webpack/**
+!node_modules/ts-loader/**

@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
 import { FTPExplorerProvider } from './ftpExplorer';
+import { Client as SSH2Client } from 'ssh2';
+import * as FTP from 'ftp';
+import { SFTPExtended, FTPExtended } from './ftpfix';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -803,18 +806,18 @@ export function activate(context: vscode.ExtensionContext) {
 	async function downloadFile(config: any, remotePath: string, localPath: string): Promise<void> {
 		return new Promise((resolve, reject) => {
 			if (config.type === 'sftp') {
-				const Client = require('ssh2').Client;
-				const conn = new Client();
+				const conn = new SSH2Client();
 				
 				conn.on('ready', () => {
-					conn.sftp((err: Error, sftp: any) => {
+					(conn as any).sftp((err: any, sftp: any) => {
 						if (err) {
 							conn.end();
 							reject(err);
 							return;
 						}
 
-						sftp.fastGet(remotePath, localPath, (err: Error) => {
+						const sftpClient = sftp as SFTPExtended;
+						sftpClient.fastGet(remotePath, localPath, (err: any) => {
 							conn.end();
 							if (err) {
 								reject(err);
@@ -832,13 +835,12 @@ export function activate(context: vscode.ExtensionContext) {
 					passphrase: config.passphrase
 				});
 			} else {
-				const Client = require('ftp');
-				const ftp = new Client();
+				const client = new FTP();
 				
-				ftp.on('ready', () => {
-					ftp.get(remotePath, (err: Error, stream: any) => {
+				(client as any).on('ready', () => {
+					(client as any).get(remotePath, ((err: any, stream: any) => {
 						if (err) {
-							ftp.end();
+							(client as any).end();
 							reject(err);
 							return;
 						}
@@ -847,15 +849,15 @@ export function activate(context: vscode.ExtensionContext) {
 						stream.pipe(writeStream);
 						
 						writeStream.on('finish', () => {
-							ftp.end();
+							(client as any).end();
 							resolve();
 						});
 
 						writeStream.on('error', (err: Error) => {
-							ftp.end();
+							(client as any).end();
 							reject(err);
 						});
-					});
+					}) as any);
 				}).connect({
 					host: config.host,
 					port: config.port,
@@ -907,8 +909,7 @@ async function loadConfigurations(): Promise<FTPConfig[]> {
 async function testFTPConnection(config: FTPConfig): Promise<boolean> {
 	try {
 		if (config.type === 'sftp') {
-			const Client = require('ssh2').Client;
-			const conn = new Client();
+			const conn = new SSH2Client();
 			
 			return new Promise((resolve) => {
 				const timeout = setTimeout(() => {
@@ -938,19 +939,18 @@ async function testFTPConnection(config: FTPConfig): Promise<boolean> {
 				});
 			});
 		} else {
-			const Client = require('ftp');
-			const ftp = new Client();
+			const client = new FTP();
 			
 			return new Promise((resolve) => {
 				const timeout = setTimeout(() => {
-					ftp.end();
+					client.end();
 					resolve(false);
 					vscode.window.showErrorMessage('连接超时');
 				}, 10000); // 10秒超时
 
-				ftp.on('ready', () => {
+				client.on('ready', () => {
 					clearTimeout(timeout);
-					ftp.end();
+					client.end();
 					resolve(true);
 				}).on('error', (err: Error) => {
 					clearTimeout(timeout);
@@ -979,19 +979,19 @@ async function testFTPConnection(config: FTPConfig): Promise<boolean> {
 async function browseRemoteDirectory(config: FTPConfig, currentPath: string = '/'): Promise<string | undefined> {
 	try {
 		if (config.type === 'sftp') {
-			const Client = require('ssh2').Client;
-			const conn = new Client();
+			const conn = new SSH2Client();
 			
 			return new Promise((resolve, reject) => {
 				conn.on('ready', () => {
-					conn.sftp((err: Error, sftp: any) => {
+					(conn as any).sftp((err: any, sftp: any) => {
 						if (err) {
 							conn.end();
 							reject(err);
 							return;
 						}
 						
-						sftp.readdir(currentPath, (err: Error, list: any[]) => {
+						const sftpClient = sftp as SFTPExtended;
+						sftpClient.readdir(currentPath, (err: any, list: any[]) => {
 							if (err) {
 								conn.end();
 								reject(err);
@@ -1021,36 +1021,28 @@ async function browseRemoteDirectory(config: FTPConfig, currentPath: string = '/
 				});
 			});
 		} else {
-			const Client = require('ftp');
-			const ftp = new Client();
+			const client = new FTP();
 			
 			return new Promise((resolve, reject) => {
-				ftp.on('ready', () => {
-					ftp.list(currentPath, (err: Error, list: any[]) => {
-						if (err) {
-							ftp.end();
-							reject(err);
-							return;
-						}
-						
-						const items = list
-							.filter(item => item.type === 'd')
-							.map(item => ({
-								name: item.name,
-								path: currentPath + (currentPath.endsWith('/') ? '' : '/') + item.name
-							}));
+				(client as any).list(currentPath, ((err: any, list: any[]) => {
+					client.end();
+					if (err) {
+						reject(err);
+						return;
+					}
+					
+					const items = list
+						.filter(item => item.type === 'd')
+						.map(item => ({
+							name: item.name,
+							path: currentPath + (currentPath.endsWith('/') ? '' : '/') + item.name
+						}));
 
-						showRemoteDirectoryPicker(items, currentPath, config).then(result => {
-							ftp.end();
-							resolve(result);
-						});
+					showRemoteDirectoryPicker(items, currentPath, config).then(result => {
+						client.end();
+						resolve(result);
 					});
-				}).connect({
-					host: config.host,
-					port: config.port,
-					user: config.username,
-					password: config.password
-				});
+				}) as any);
 			});
 		}
 	} catch (error) {
@@ -1326,10 +1318,10 @@ class RemoteDirectoryPicker {
 
 	private async openRemoteFile(path: string): Promise<void> {
 		return new Promise((resolve, reject) => {
-			const client = this.config.type === 'ftp' ? new (require('ftp'))() : new (require('ssh2').Client)();
+			const client = this.config.type === 'ftp' ? new FTP() : new SSH2Client();
 
 			client.on('ready', () => {
-				client.get(path, async (err: Error | null, stream: any) => {
+				(client as any).get(path, ((err: any, stream: any) => {
 					if (err) {
 						client.end();
 						reject(err);
@@ -1374,7 +1366,7 @@ class RemoteDirectoryPicker {
 						client.end();
 						reject(error);
 					}
-				});
+				}) as any);
 			});
 
 			client.on('error', (err: Error) => {
@@ -1443,10 +1435,10 @@ class RemoteDirectoryPicker {
 
 	private async listDirectory(path: string): Promise<any[]> {
 		return new Promise((resolve, reject) => {
-			const client = this.config.type === 'ftp' ? new (require('ftp'))() : new (require('ssh2').Client)();
+			const client = this.config.type === 'ftp' ? new FTP() : new SSH2Client();
 
 			client.on('ready', () => {
-				client.list(path, (err: Error | null, list: any[]) => {
+				(client as any).list(path, ((err: any, list: any[]) => {
 					client.end();
 					if (err) {
 						reject(err);
@@ -1457,7 +1449,7 @@ class RemoteDirectoryPicker {
 							path: path + (path.endsWith('/') ? '' : '/') + item.name
 						})));
 					}
-				});
+				}) as any);
 			});
 
 			client.on('error', (err: Error) => {
@@ -1487,22 +1479,22 @@ async function uploadFile(config: FTPConfig, localPath: string, remotePath: stri
 		const fs = require('fs');
 		
 		if (config.type === 'sftp') {
-			const Client = require('ssh2').Client;
-			const conn = new Client();
+			const conn = new SSH2Client();
 
 			conn.on('ready', () => {
-				conn.sftp((err: Error, sftp: any) => {
+				(conn as any).sftp((err: any, sftp: any) => {
 					if (err) {
 						conn.end();
 						reject(err);
 						return;
 					}
 
+					const sftpClient = sftp as SFTPExtended;
 					// 确保远程目录存在
 					const remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'));
-					createRemoteDirectory(sftp, remoteDir).then(() => {
+					createRemoteDirectory(sftpClient, remoteDir).then(() => {
 						// 上传文件
-						sftp.fastPut(localPath, remotePath, (err: Error) => {
+						sftpClient.fastPut(localPath, remotePath, (err: any) => {
 							conn.end();
 							if (err) {
 								reject(err);
@@ -1529,16 +1521,15 @@ async function uploadFile(config: FTPConfig, localPath: string, remotePath: stri
 			});
 		} else {
 			// FTP 上传
-			const Client = require('ftp');
-			const ftp = new Client();
+			const client = new FTP();
 
-			ftp.on('ready', () => {
+			client.on('ready', () => {
 				// 确保远程目录存在
 				const remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'));
-				createRemoteDirectoryFTP(ftp, remoteDir).then(() => {
+				createRemoteDirectoryFTP(client, remoteDir).then(() => {
 					// 上传文件
-					ftp.put(localPath, remotePath, (err: Error) => {
-						ftp.end();
+					client.put(localPath, remotePath, (err: any) => {
+						client.end();
 						if (err) {
 							reject(err);
 						} else {
@@ -1546,16 +1537,16 @@ async function uploadFile(config: FTPConfig, localPath: string, remotePath: stri
 						}
 					});
 				}).catch(err => {
-					ftp.end();
+					client.end();
 					reject(err);
 				});
 			});
 
-			ftp.on('error', (err: Error) => {
+			client.on('error', (err: Error) => {
 				reject(err);
 			});
 
-			ftp.connect({
+			client.connect({
 				host: config.host,
 				port: config.port,
 				user: config.username,
@@ -1566,7 +1557,7 @@ async function uploadFile(config: FTPConfig, localPath: string, remotePath: stri
 }
 
 // 递归创建远程目录 (SFTP)
-async function createRemoteDirectory(sftp: any, dir: string): Promise<void> {
+async function createRemoteDirectory(sftp: SFTPExtended, dir: string): Promise<void> {
 	const dirs = dir.split('/').filter(Boolean);
 	let currentDir = '';
 
@@ -1574,9 +1565,9 @@ async function createRemoteDirectory(sftp: any, dir: string): Promise<void> {
 		currentDir += '/' + d;
 		try {
 			await new Promise((resolve, reject) => {
-				sftp.stat(currentDir, (err: Error, stats: any) => {
+				sftp.stat(currentDir, (err: any, stats: any) => {
 					if (err) {
-						sftp.mkdir(currentDir, (err: Error) => {
+						sftp.mkdir(currentDir, (err: any) => {
 							if (err) {
 								reject(err);
 							} else {
@@ -1595,7 +1586,7 @@ async function createRemoteDirectory(sftp: any, dir: string): Promise<void> {
 }
 
 // 递归创建远程目录 (FTP)
-async function createRemoteDirectoryFTP(ftp: any, dir: string): Promise<void> {
+async function createRemoteDirectoryFTP(ftp: FTPExtended, dir: string): Promise<void> {
 	const dirs = dir.split('/').filter(Boolean);
 	let currentDir = '';
 
@@ -1603,7 +1594,7 @@ async function createRemoteDirectoryFTP(ftp: any, dir: string): Promise<void> {
 		currentDir += '/' + d;
 		try {
 			await new Promise((resolve, reject) => {
-				ftp.mkdir(currentDir, true, (err: Error) => {
+				(ftp as any).mkdir(currentDir, true, (err: any) => {
 					if (err) {
 						reject(err);
 					} else {
