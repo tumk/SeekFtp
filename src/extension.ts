@@ -9,7 +9,7 @@ import { SFTPExtended, FTPExtended } from './ftpfix';
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-	console.log('IDEA FTP 插件已激活');
+	console.log('SeekFtp 插件已激活');
 
 	// 创建 FTP 资源管理器提供程序
 	const ftpExplorerProvider = new FTPExplorerProvider(context);

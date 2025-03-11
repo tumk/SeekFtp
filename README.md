@@ -1,4 +1,4 @@
-# IDEA FTP 插件使用指南
+# SeekFtp 插件使用指南
 
 ## 功能特性
 - FTP/SFTP 连接管理
@@ -10,7 +10,7 @@
 
 ### 1. 添加 FTP 连接
 1. 打开命令面板 (Ctrl+Shift+P)
-2. 输入 "IDEA FTP: 添加连接"
+2. 输入 "SeekFtp: 添加连接"
 3. 填写以下信息：
    - 名称：连接名称
    - 类型：FTP 或 SFTP

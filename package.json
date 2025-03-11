@@ -9,7 +9,7 @@
 	"publisher": "SeekFtp",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/tumk/idea-ftp.git"
+		"url": "https://github.com/tumk/SeekFtp.git"
 	},
 	"categories": [
 		"Other"
@@ -30,7 +30,7 @@
 			"activitybar": [
 				{
 					"id": "idea-ftp-explorer",
-					"title": "IDEA FTP",
+					"title": "SeekFtp",
 					"icon": "resources/ftp-icon.svg"
 				}
 			]
@@ -136,11 +136,11 @@
 		"submenus": [
 			{
 				"id": "idea-ftp.upload",
-				"label": "IDEA-FTP"
+				"label": "SeekFtp"
 			}
 		],
 		"configuration": {
-			"title": "IDEA FTP",
+			"title": "SeekFtp",
 			"properties": {
 				"idea-ftp.connections": {
 					"type": "array",
