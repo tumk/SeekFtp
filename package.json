@@ -1,12 +1,12 @@
 {
-	"name": "idea-ftp",
-	"displayName": "IDEA FTP",
+	"name": "seekftp",
+	"displayName": "SeekFtp",
 	"description": "\"FTP/SFTP Integration for VS Code\" 是一款功能强大的 FTP/SFTP 插件，专为开发者设计，提供与 IntelliJ IDEA 相媲美的远程文件管理体验。通过该插件，您可以轻松连接远程服务器，直接在 VS Code 中浏览、编辑和上传文件。支持自动同步、多服务器管理、文件差异对比、断点续传等功能，帮助您高效管理远程代码，提升开发效率。",
-	"version": "0.0.11",
+	"version": "0.1.1",
 	"engines": {
 		"vscode": "^1.80.0"
 	},
-	"publisher": "idea-ftp",
+	"publisher": "SeekFtp",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/tumk/idea-ftp.git"
